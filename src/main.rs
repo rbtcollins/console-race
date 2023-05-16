@@ -2,7 +2,27 @@ use std::{io::Write, thread::JoinHandle};
 
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
+fn unlocked_io(spec: ColorSpec) -> std::io::Result<()> {
+    let mut stdout = StandardStream::stdout(ColorChoice::Always);
+    loop {
+        stdout.set_color(&spec)?;
+        writeln!(&mut stdout, "{:?} text!", spec)?;
+    }
+}
+
+fn locked_io(spec: ColorSpec) -> std::io::Result<()> {
+    let stdout = StandardStream::stdout(ColorChoice::Always);
+    loop {
+        {
+            let mut w = stdout.lock();
+            w.set_color(&spec)?;
+            writeln!(&mut w, "{:?} text!", spec)?;
+        }
+    }
+}
+
 fn main() -> std::io::Result<()> {
+    let locked = std::env::args().count() == 2;
     let mut handles: Vec<JoinHandle<std::io::Result<()>>> = vec![];
     for color in [
         Color::Black,
@@ -15,11 +35,11 @@ fn main() -> std::io::Result<()> {
         Color::Yellow,
     ] {
         let spec = ColorSpec::new().set_fg(Some(color)).clone();
-        let mut stdout = StandardStream::stdout(ColorChoice::Always);
         handles.push(std::thread::spawn(move || -> std::io::Result<()> {
-            loop {
-                stdout.set_color(&spec)?;
-                writeln!(&mut stdout, "{:?} text!", spec)?;
+            if locked {
+                locked_io(spec)
+            } else {
+                unlocked_io(spec)
             }
             // unreachable!();
             // Ok(())
